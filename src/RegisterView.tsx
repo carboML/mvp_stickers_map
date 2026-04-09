@@ -29,14 +29,26 @@ function formatLatLng(lat: number, lng: number) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 }
 
-function MapRefCapture({ mapRef }: { mapRef: MutableRefObject<L.Map | null> }) {
+function RegisterMapBridge({
+  mapRef,
+  onMapReady,
+}: {
+  mapRef: MutableRefObject<L.Map | null>
+  onMapReady: () => void
+}) {
   const map = useMap()
+  const onReadyRef = useRef(onMapReady)
+  onReadyRef.current = onMapReady
+
   useEffect(() => {
     mapRef.current = map
+    const done = () => onReadyRef.current()
+    map.whenReady(done)
     return () => {
       mapRef.current = null
     }
   }, [map, mapRef])
+
   return null
 }
 
@@ -53,8 +65,8 @@ export default function RegisterView() {
 
   const [draftLatLng, setDraftLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const registerMapRef = useRef<L.Map | null>(null)
+  const [mapReady, setMapReady] = useState(false)
 
   const parsed = useMemo(() => parseNfcId(nfcId), [nfcId])
   const lot = useMemo(() => (parsed ? getLotById(parsed.lotId) : null), [parsed])
@@ -98,6 +110,7 @@ export default function RegisterView() {
     if (!canStart) return
     setDraftLatLng(null)
     setPhotoDataUrl(null)
+    setMapReady(false)
   }, [canStart, nfcId])
 
   useEffect(() => {
@@ -217,7 +230,10 @@ export default function RegisterView() {
               dragging
               touchZoom
             >
-              <MapRefCapture mapRef={registerMapRef} />
+              <RegisterMapBridge
+                mapRef={registerMapRef}
+                onMapReady={() => setMapReady(true)}
+              />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -228,16 +244,20 @@ export default function RegisterView() {
 
           <button
             type="button"
-            className="registerBigPrimary"
-            disabled={!canStart || alreadyRegistered}
+            className="registerBigPrimary registerTapTarget"
+            disabled={!canStart || alreadyRegistered || !mapReady}
             onClick={() => {
               const m = registerMapRef.current
-              if (!m || !canStart || alreadyRegistered) return
+              if (!m || !canStart || alreadyRegistered || !mapReady) return
               const c = m.getCenter()
               setDraftLatLng({ lat: c.lat, lng: c.lng })
             }}
           >
-            {draftLatLng ? 'Actualizar ubicación (centro del mapa)' : 'Confirmar ubicación aquí'}
+            {!mapReady
+              ? 'Cargando mapa…'
+              : draftLatLng
+                ? 'Actualizar ubicación (centro del mapa)'
+                : 'Confirmar ubicación aquí'}
           </button>
         </section>
 
@@ -245,31 +265,29 @@ export default function RegisterView() {
           <div className="registerStepBadge">Paso 2</div>
           <div className="cardTitle">Foto de la pegatina</div>
           <p className="registerLead">Abre la cámara y haz una foto clara de la pegatina.</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hiddenFile"
-            onChange={(e) => {
-              const f = e.target.files?.[0]
-              if (f) void onPickPhoto(f)
-            }}
-            disabled={!canStart || alreadyRegistered}
-          />
-          <button
-            type="button"
-            className="registerBigCamera"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={!canStart || alreadyRegistered}
+          <label
+            className={
+              !canStart || alreadyRegistered ? 'registerBigCamera registerBigCameraDisabled' : 'registerBigCamera'
+            }
           >
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="registerFileInputOverlay"
+              disabled={!canStart || alreadyRegistered}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void onPickPhoto(f)
+              }}
+            />
             <span className="registerBigCameraIcon" aria-hidden>
               📷
             </span>
             <span className="registerBigCameraText">
               {photoDataUrl ? 'Cambiar foto' : 'Hacer foto con la cámara'}
             </span>
-          </button>
+          </label>
 
           {!photoDataUrl ? <div className="registerNote">La foto es obligatoria para guardar.</div> : null}
 
@@ -283,7 +301,7 @@ export default function RegisterView() {
 
           <button
             type="button"
-            className="registerBigSave"
+            className="registerBigSave registerTapTarget"
             onClick={() => void registerSticker()}
             disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}
           >
