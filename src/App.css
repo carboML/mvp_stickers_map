@@ -473,11 +473,167 @@ button:disabled {
   background: var(--code-bg);
 }
 
+.registerMapWrap {
+  position: relative;
+}
+
+.mapCrosshair {
+  position: absolute;
+  inset: 0;
+  z-index: 650;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mapCrosshairRing {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.95);
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.35),
+    0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.mapCrosshairDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
 .registerMapWrap .leaflet-container {
   font-family: var(--sans);
-  /* Mejor respuesta al tacto en iOS/Android con Leaflet */
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+.registerCard {
+  padding: 14px;
+}
+
+.registerStepBadge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+}
+
+.registerHint {
+  margin-bottom: 10px;
+}
+
+.registerOk {
+  color: var(--text-h);
+}
+
+.registerLead {
+  margin: 0 0 14px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.registerBigPrimary {
+  width: 100%;
+  margin-top: 12px;
+  padding: 18px 16px;
+  min-height: 56px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.registerBigPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.registerBigCamera {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 100px;
+  padding: 20px 16px;
+  border-radius: 16px;
+  border: 2px dashed var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+  cursor: pointer;
+  font: inherit;
+}
+
+.registerBigCamera:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.registerBigCameraIcon {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.registerBigCameraText {
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  max-width: 280px;
+}
+
+.registerNote {
+  margin-top: 12px;
+  font-size: 14px;
+  color: var(--text);
+  text-align: center;
+}
+
+.registerPhotoPreview {
+  margin-top: 14px;
+}
+
+.registerBigSave {
+  width: 100%;
+  margin-top: 18px;
+  padding: 20px 16px;
+  min-height: 60px;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+  border-radius: 14px;
+  border: none;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.registerBigSave:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.registerShell .registerTop .ghost {
+  min-height: 44px;
+  font-size: 15px;
 }
 
 .miniMap {

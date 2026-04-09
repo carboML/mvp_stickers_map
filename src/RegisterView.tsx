@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
-import L, { type LeafletMouseEvent } from 'leaflet'
+import L from 'leaflet'
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png'
 import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png'
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png'
@@ -29,21 +29,14 @@ function formatLatLng(lat: number, lng: number) {
   return `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 }
 
-function ClickToPick({ onPick }: { onPick: (lat: number, lng: number) => void }) {
+function MapRefCapture({ mapRef }: { mapRef: MutableRefObject<L.Map | null> }) {
   const map = useMap()
-  const onPickRef = useRef(onPick)
-  onPickRef.current = onPick
-
   useEffect(() => {
-    const handler = (e: LeafletMouseEvent) => {
-      onPickRef.current(e.latlng.lat, e.latlng.lng)
-    }
-    map.on('click', handler)
+    mapRef.current = map
     return () => {
-      map.off('click', handler)
+      mapRef.current = null
     }
-  }, [map])
-
+  }, [map, mapRef])
   return null
 }
 
@@ -61,6 +54,7 @@ export default function RegisterView() {
   const [draftLatLng, setDraftLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const registerMapRef = useRef<L.Map | null>(null)
 
   const parsed = useMemo(() => parseNfcId(nfcId), [nfcId])
   const lot = useMemo(() => (parsed ? getLotById(parsed.lotId) : null), [parsed])
@@ -105,6 +99,12 @@ export default function RegisterView() {
     setDraftLatLng(null)
     setPhotoDataUrl(null)
   }, [canStart, nfcId])
+
+  useEffect(() => {
+    const m = registerMapRef.current
+    if (!m) return
+    requestAnimationFrame(() => m.invalidateSize())
+  }, [draftLatLng])
 
   async function onPickPhoto(file: File) {
     if (!file.type.startsWith('image/')) return
@@ -159,7 +159,7 @@ export default function RegisterView() {
       <div className="registerTop">
         <div>
           <div className="title">Registrar ubicación</div>
-          <div className="subtitle">Toca el mapa y haz la foto</div>
+          <div className="subtitle">Centra el mapa y confirma · luego la foto</div>
         </div>
         <button className="ghost" onClick={backHome}>
           Volver al mapa
@@ -182,27 +182,33 @@ export default function RegisterView() {
           {alreadyRegistered ? <div className="empty">Esta pegatina ya está registrada.</div> : null}
         </section>
 
-        <section className="card">
-          <div className="cardTitle">Registrar ubicación</div>
-          <div className="hint">
-            <strong>Toca el mapa</strong> donde está la pegatina (arrastra con el dedo para moverte, pellizca para
-            zoom).
+        <section className="card registerCard">
+          <div className="registerStepBadge">Paso 1</div>
+          <div className="cardTitle">Ubicación en el mapa</div>
+          <div className="hint registerHint">
+            <strong>Mueve el mapa con el dedo</strong> hasta que la cruz del centro quede donde está la pegatina.
+            Pellizca para acercar o alejar.
             {draftLatLng ? (
               <>
                 <br />
-                <strong>Punto:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
+                <strong className="registerOk">Ubicación lista:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
               </>
             ) : (
               <>
                 <br />
-                <span className="hintMuted">Aún no has marcado el sitio.</span>
+                <span className="hintMuted">Luego pulsa el botón verde para fijarla.</span>
               </>
             )}
           </div>
 
           <div className="miniMapWrap registerMapWrap">
+            <div className="mapCrosshair" aria-hidden>
+              <div className="mapCrosshairRing" />
+              <div className="mapCrosshairDot" />
+            </div>
             <MapContainer
-              center={draftLatLng ? [draftLatLng.lat, draftLatLng.lng] : [40.4168, -3.7038]}
+              key={nfcId || 'no-nfc'}
+              center={[40.4168, -3.7038]}
               zoom={15}
               className="miniMap"
               zoomControl
@@ -211,64 +217,78 @@ export default function RegisterView() {
               dragging
               touchZoom
             >
+              <MapRefCapture mapRef={registerMapRef} />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <ClickToPick
-                onPick={(lat, lng) => {
-                  if (!canStart || alreadyRegistered) return
-                  setDraftLatLng({ lat, lng })
-                }}
-              />
               {draftLatLng ? <Marker position={[draftLatLng.lat, draftLatLng.lng]} icon={DefaultMarkerIcon} /> : null}
             </MapContainer>
           </div>
+
+          <button
+            type="button"
+            className="registerBigPrimary"
+            disabled={!canStart || alreadyRegistered}
+            onClick={() => {
+              const m = registerMapRef.current
+              if (!m || !canStart || alreadyRegistered) return
+              const c = m.getCenter()
+              setDraftLatLng({ lat: c.lat, lng: c.lng })
+            }}
+          >
+            {draftLatLng ? 'Actualizar ubicación (centro del mapa)' : 'Confirmar ubicación aquí'}
+          </button>
         </section>
 
-        <section className="card">
-          <div className="cardTitle">Sacar una foto</div>
-          <div className="row">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hiddenFile"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void onPickPhoto(f)
-              }}
-              disabled={!canStart || alreadyRegistered}
-            />
-            <button
-              className="ghost full"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={!canStart || alreadyRegistered}
-            >
-              {photoDataUrl ? 'Cambiar foto' : 'Hacer foto'}
-            </button>
-          </div>
+        <section className="card registerCard">
+          <div className="registerStepBadge">Paso 2</div>
+          <div className="cardTitle">Foto de la pegatina</div>
+          <p className="registerLead">Abre la cámara y haz una foto clara de la pegatina.</p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hiddenFile"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void onPickPhoto(f)
+            }}
+            disabled={!canStart || alreadyRegistered}
+          />
+          <button
+            type="button"
+            className="registerBigCamera"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!canStart || alreadyRegistered}
+          >
+            <span className="registerBigCameraIcon" aria-hidden>
+              📷
+            </span>
+            <span className="registerBigCameraText">
+              {photoDataUrl ? 'Cambiar foto' : 'Hacer foto con la cámara'}
+            </span>
+          </button>
 
-          {!photoDataUrl ? <div className="empty">La foto es obligatoria.</div> : null}
+          {!photoDataUrl ? <div className="registerNote">La foto es obligatoria para guardar.</div> : null}
 
           {photoDataUrl ? (
-            <div className="photoPreview">
-              <img src={photoDataUrl} alt="" />
+            <div className="photoPreview registerPhotoPreview">
+              <img src={photoDataUrl} alt="Vista previa" />
             </div>
           ) : null}
 
           {submitError ? <div className="empty">{submitError}</div> : null}
 
-          <div className="row">
-            <button
-              className="primary full"
-              onClick={() => void registerSticker()}
-              disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}
-            >
-              Guardar
-            </button>
-          </div>
+          <button
+            type="button"
+            className="registerBigSave"
+            onClick={() => void registerSticker()}
+            disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}
+          >
+            Guardar pegatina
+          </button>
         </section>
       </div>
     </div>
