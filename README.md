@@ -8,7 +8,7 @@ Webapp muy sencilla para registrar pegatinas NFC en un mapa. Para registrar una 
 npm install
 npm run dev
 ```
-dummy
+dummy2
 ### URL a grabar en el NFC
 
 Ejemplo:
