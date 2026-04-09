@@ -31,23 +31,23 @@ function formatLatLng(lat: number, lng: number) {
 
 function RegisterMapBridge({
   mapRef,
-  onMapReady,
+  setMapReady,
 }: {
   mapRef: MutableRefObject<L.Map | null>
-  onMapReady: () => void
+  setMapReady: (ready: boolean) => void
 }) {
   const map = useMap()
-  const onReadyRef = useRef(onMapReady)
-  onReadyRef.current = onMapReady
 
   useEffect(() => {
     mapRef.current = map
-    const done = () => onReadyRef.current()
+    setMapReady(false)
+    const done = () => setMapReady(true)
     map.whenReady(done)
     return () => {
       mapRef.current = null
+      setMapReady(false)
     }
-  }, [map, mapRef])
+  }, [map, mapRef, setMapReady])
 
   return null
 }
@@ -67,6 +67,7 @@ export default function RegisterView() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
   const registerMapRef = useRef<L.Map | null>(null)
   const [mapReady, setMapReady] = useState(false)
+  const [locationHint, setLocationHint] = useState<string | null>(null)
 
   const parsed = useMemo(() => parseNfcId(nfcId), [nfcId])
   const lot = useMemo(() => (parsed ? getLotById(parsed.lotId) : null), [parsed])
@@ -111,6 +112,7 @@ export default function RegisterView() {
     setDraftLatLng(null)
     setPhotoDataUrl(null)
     setMapReady(false)
+    setLocationHint(null)
   }, [canStart, nfcId])
 
   useEffect(() => {
@@ -118,6 +120,32 @@ export default function RegisterView() {
     if (!m) return
     requestAnimationFrame(() => m.invalidateSize())
   }, [draftLatLng])
+
+  function confirmLocationFromMap() {
+    setLocationHint(null)
+    const tryApply = () => {
+      const m = registerMapRef.current
+      if (!m) return false
+      const c = m.getCenter()
+      setDraftLatLng({ lat: c.lat, lng: c.lng })
+      return true
+    }
+
+    if (tryApply()) return
+
+    let attempts = 0
+    const max = 12
+    const tick = () => {
+      attempts += 1
+      if (tryApply()) return
+      if (attempts >= max) {
+        setLocationHint('El mapa tardó en cargar. Desplázate un poco y vuelve a pulsar.')
+        return
+      }
+      window.setTimeout(tick, 50)
+    }
+    window.requestAnimationFrame(tick)
+  }
 
   async function onPickPhoto(file: File) {
     if (!file.type.startsWith('image/')) return
@@ -230,10 +258,7 @@ export default function RegisterView() {
               dragging
               touchZoom
             >
-              <RegisterMapBridge
-                mapRef={registerMapRef}
-                onMapReady={() => setMapReady(true)}
-              />
+              <RegisterMapBridge mapRef={registerMapRef} setMapReady={setMapReady} />
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -242,19 +267,19 @@ export default function RegisterView() {
             </MapContainer>
           </div>
 
+          {locationHint ? <div className="empty">{locationHint}</div> : null}
+
           <button
             type="button"
             className="registerBigPrimary registerTapTarget"
-            disabled={!canStart || alreadyRegistered || !mapReady}
+            disabled={!canStart || alreadyRegistered}
             onClick={() => {
-              const m = registerMapRef.current
-              if (!m || !canStart || alreadyRegistered || !mapReady) return
-              const c = m.getCenter()
-              setDraftLatLng({ lat: c.lat, lng: c.lng })
+              if (!canStart || alreadyRegistered) return
+              confirmLocationFromMap()
             }}
           >
             {!mapReady
-              ? 'Cargando mapa…'
+              ? 'Confirmar ubicación (esperando mapa…)'
               : draftLatLng
                 ? 'Actualizar ubicación (centro del mapa)'
                 : 'Confirmar ubicación aquí'}
