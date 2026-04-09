@@ -43,12 +43,9 @@ export default function RegisterView() {
 
   const [stickers, setStickers] = useState<Sticker[]>(() => loadStickers())
 
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [draftAuthorName, setDraftAuthorName] = useState('')
-  const [draftLabel, setDraftLabel] = useState('')
-  const [draftNote, setDraftNote] = useState('')
   const [draftLatLng, setDraftLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
+  const [geoStatus, setGeoStatus] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const parsed = useMemo(() => parseNfcId(nfcId), [nfcId])
@@ -71,8 +68,27 @@ export default function RegisterView() {
 
   useEffect(() => {
     if (!canStart) return
-    setStep(1)
+    setDraftLatLng(null)
+    setPhotoDataUrl(null)
   }, [canStart, nfcId])
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setGeoStatus('Geolocalización no disponible.')
+      return
+    }
+    setGeoStatus('Obteniendo ubicación…')
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDraftLatLng({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setGeoStatus(null)
+      },
+      () => {
+        setGeoStatus('No se pudo obtener la ubicación. Selecciónala en el mapa.')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30_000 },
+    )
+  }
 
   async function onPickPhoto(file: File) {
     if (!file.type.startsWith('image/')) return
@@ -85,25 +101,19 @@ export default function RegisterView() {
   function registerSticker() {
     if (!canStart) return
     if (!draftLatLng) return
-    const authorName = draftAuthorName.trim()
-    if (!authorName) return
-    const label = draftLabel.trim()
-    if (!label) return
     if (!photoDataUrl) return
 
     if (!parsed || !lot) return
 
     const sticker: Sticker = {
       id: newId(),
-      authorName,
-      label,
+      label: `${lot.name} #${parsed.stickerNumber}`,
       lat: draftLatLng.lat,
       lng: draftLatLng.lng,
       nfcId,
       lotId: lot.id,
       lotName: lot.name,
       lotStickerNumber: parsed.stickerNumber,
-      note: draftNote.trim() || undefined,
       photoDataUrl,
       createdAt: new Date().toISOString(),
     }
@@ -116,8 +126,8 @@ export default function RegisterView() {
     <div className="registerShell">
       <div className="registerTop">
         <div>
-          <div className="title">Registrar pegatina</div>
-          <div className="subtitle">Sigue los pasos (sin mapa)</div>
+          <div className="title">Registrar ubicación</div>
+          <div className="subtitle">Rápido: ubicación + foto</div>
         </div>
         <button className="ghost" onClick={backHome}>
           Volver al mapa
@@ -126,169 +136,101 @@ export default function RegisterView() {
 
       <div className="registerContent">
         <section className="card">
-          <div className="cardTitle">Progreso</div>
-          <div className="steps">
-            <div className={step === 1 ? 'step active' : 'step'}>Step 1</div>
-            <div className={step === 2 ? 'step active' : 'step'}>Step 2</div>
-            <div className={step === 3 ? 'step active' : 'step'}>Step 3</div>
-          </div>
+          <div className="cardTitle">Pegatina detectada</div>
+          {!canStart ? (
+            <div className="empty">NFC inválido o lote desconocido.</div>
+          ) : (
+            <div className="hint">
+              Pegatina <strong>#{parsed!.stickerNumber}</strong> · <strong>{lot!.name}</strong>
+            </div>
+          )}
 
           {alreadyRegistered ? <div className="empty">Esta pegatina ya está registrada.</div> : null}
         </section>
 
-        {step === 1 ? (
-          <section className="card">
-            <div className="cardTitle">Step 1 · Confirmación</div>
-            {!canStart ? (
-              <div className="empty">NFC inválido o lote desconocido.</div>
-            ) : (
+        <section className="card">
+          <div className="cardTitle">Registrar ubicación</div>
+          <div className="hint">
+            Selecciona la ubicación en el mapa (click para marcar).
+            {draftLatLng ? (
               <>
-                <div className="hint">
-                  Estás a punto de registrar la pegatina número <strong>#{parsed!.stickerNumber}</strong> del lote{' '}
-                  <strong>{lot!.name}</strong>.
-                  <br />
-                  <span style={{ opacity: 0.8 }}>ID: {nfcId}</span>
-                </div>
-                <button className="primary full" onClick={() => setStep(2)} disabled={alreadyRegistered}>
-                  Empezar
-                </button>
+                <br />
+                <strong>Ubicación:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
               </>
-            )}
-          </section>
-        ) : null}
+            ) : null}
+            {geoStatus ? (
+              <>
+                <br />
+                <span style={{ opacity: 0.9 }}>{geoStatus}</span>
+              </>
+            ) : null}
+          </div>
 
-        {step === 2 ? (
-          <section className="card">
-            <div className="cardTitle">Step 2 · ¿Dónde está?</div>
-            <div className="hint">
-              Selecciona la ubicación en el mapa (click para marcar).
-              {draftLatLng ? (
-                <>
-                  <br />
-                  <strong>Ubicación:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
-                </>
-              ) : null}
-            </div>
+          <div className="row">
+            <button className="ghost full" onClick={useMyLocation} disabled={!canStart || alreadyRegistered}>
+              Usar la del móvil
+            </button>
+          </div>
 
-            <div className="miniMapWrap">
-              <MapContainer
-                center={draftLatLng ? [draftLatLng.lat, draftLatLng.lng] : [40.4168, -3.7038]}
-                zoom={13}
-                className="miniMap"
-              >
-                <TileLayer
-                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-                <ClickToPick
-                  onPick={(lat, lng) => {
-                    if (!canStart || alreadyRegistered) return
-                    setDraftLatLng({ lat, lng })
-                  }}
-                />
-                {draftLatLng ? (
-                  <Marker position={[draftLatLng.lat, draftLatLng.lng]} icon={DefaultMarkerIcon} />
-                ) : null}
-              </MapContainer>
-            </div>
-
-            <div className="row">
-              <button className="ghost" onClick={() => setStep(1)}>
-                Atrás
-              </button>
-              <button className="primary" onClick={() => setStep(3)} disabled={!draftLatLng || alreadyRegistered}>
-                Continuar
-              </button>
-            </div>
-          </section>
-        ) : null}
-
-        {step === 3 ? (
-          <section className="card">
-            <div className="cardTitle">Step 3 · Foto + texto</div>
-            <label className="field">
-              <span>Tu nombre</span>
-              <input
-                value={draftAuthorName}
-                onChange={(e) => setDraftAuthorName(e.target.value)}
-                placeholder="Ej: Pablo"
-                disabled={!canStart || alreadyRegistered}
+          <div className="miniMapWrap">
+            <MapContainer
+              center={draftLatLng ? [draftLatLng.lat, draftLatLng.lng] : [40.4168, -3.7038]}
+              zoom={13}
+              className="miniMap"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-            </label>
-
-            <label className="field">
-              <span>Título</span>
-              <input
-                value={draftLabel}
-                onChange={(e) => setDraftLabel(e.target.value)}
-                placeholder="Ej: Bodegón: esquina izquierda"
-                disabled={!canStart || alreadyRegistered}
-              />
-            </label>
-
-            <label className="field">
-              <span>Texto (opcional)</span>
-              <textarea
-                value={draftNote}
-                onChange={(e) => setDraftNote(e.target.value)}
-                placeholder="Ej: Pegada el 8/4, al lado de la farola…"
-                disabled={!canStart || alreadyRegistered}
-              />
-            </label>
-
-            <div className="row">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hiddenFile"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (f) void onPickPhoto(f)
+              <ClickToPick
+                onPick={(lat, lng) => {
+                  if (!canStart || alreadyRegistered) return
+                  setDraftLatLng({ lat, lng })
                 }}
-                disabled={!canStart || alreadyRegistered}
               />
-              <button
-                className="ghost full"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={!canStart || alreadyRegistered}
-              >
-                {photoDataUrl ? 'Cambiar foto' : 'Añadir foto'}
-              </button>
+              {draftLatLng ? <Marker position={[draftLatLng.lat, draftLatLng.lng]} icon={DefaultMarkerIcon} /> : null}
+            </MapContainer>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="cardTitle">Sacar una foto</div>
+          <div className="row">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hiddenFile"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void onPickPhoto(f)
+              }}
+              disabled={!canStart || alreadyRegistered}
+            />
+            <button
+              className="ghost full"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={!canStart || alreadyRegistered}
+            >
+              {photoDataUrl ? 'Cambiar foto' : 'Hacer foto'}
+            </button>
+          </div>
+
+          {!photoDataUrl ? <div className="empty">La foto es obligatoria.</div> : null}
+
+          {photoDataUrl ? (
+            <div className="photoPreview">
+              <img src={photoDataUrl} alt="" />
             </div>
+          ) : null}
 
-            {!photoDataUrl ? (
-              <div className="empty">La foto es obligatoria para guardar.</div>
-            ) : null}
-
-            {photoDataUrl ? (
-              <div className="photoPreview">
-                <img src={photoDataUrl} alt="" />
-              </div>
-            ) : null}
-
-            <div className="row">
-              <button className="ghost" onClick={() => setStep(2)}>
-                Atrás
-              </button>
-              <button
-                className="primary"
-                onClick={registerSticker}
-                disabled={
-                  !canStart ||
-                  alreadyRegistered ||
-                  !draftLatLng ||
-                  !draftAuthorName.trim() ||
-                  !draftLabel.trim() ||
-                  !photoDataUrl
-                }
-              >
-                Guardar
-              </button>
-            </div>
-          </section>
-        ) : null}
+          <div className="row">
+            <button className="primary full" onClick={registerSticker} disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}>
+              Guardar
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   )
