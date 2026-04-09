@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { MapContainer, Marker, TileLayer, useMapEvents } from 'react-leaflet'
-import L from 'leaflet'
+import { MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
+import L, { type LeafletMouseEvent } from 'leaflet'
 import markerIconUrl from 'leaflet/dist/images/marker-icon.png'
 import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png'
 import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png'
@@ -30,11 +30,20 @@ function formatLatLng(lat: number, lng: number) {
 }
 
 function ClickToPick({ onPick }: { onPick: (lat: number, lng: number) => void }) {
-  useMapEvents({
-    click(e) {
-      onPick(e.latlng.lat, e.latlng.lng)
-    },
-  })
+  const map = useMap()
+  const onPickRef = useRef(onPick)
+  onPickRef.current = onPick
+
+  useEffect(() => {
+    const handler = (e: LeafletMouseEvent) => {
+      onPickRef.current(e.latlng.lat, e.latlng.lng)
+    }
+    map.on('click', handler)
+    return () => {
+      map.off('click', handler)
+    }
+  }, [map])
+
   return null
 }
 
@@ -51,7 +60,6 @@ export default function RegisterView() {
 
   const [draftLatLng, setDraftLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
-  const [geoStatus, setGeoStatus] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const parsed = useMemo(() => parseNfcId(nfcId), [nfcId])
@@ -97,24 +105,6 @@ export default function RegisterView() {
     setDraftLatLng(null)
     setPhotoDataUrl(null)
   }, [canStart, nfcId])
-
-  function useMyLocation() {
-    if (!navigator.geolocation) {
-      setGeoStatus('Geolocalización no disponible.')
-      return
-    }
-    setGeoStatus('Obteniendo ubicación…')
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setDraftLatLng({ lat: pos.coords.latitude, lng: pos.coords.longitude })
-        setGeoStatus(null)
-      },
-      () => {
-        setGeoStatus('No se pudo obtener la ubicación. Selecciónala en el mapa.')
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30_000 },
-    )
-  }
 
   async function onPickPhoto(file: File) {
     if (!file.type.startsWith('image/')) return
@@ -169,7 +159,7 @@ export default function RegisterView() {
       <div className="registerTop">
         <div>
           <div className="title">Registrar ubicación</div>
-          <div className="subtitle">Rápido: ubicación + foto</div>
+          <div className="subtitle">Toca el mapa y haz la foto</div>
         </div>
         <button className="ghost" onClick={backHome}>
           Volver al mapa
@@ -195,32 +185,31 @@ export default function RegisterView() {
         <section className="card">
           <div className="cardTitle">Registrar ubicación</div>
           <div className="hint">
-            Selecciona la ubicación en el mapa (click para marcar).
+            <strong>Toca el mapa</strong> donde está la pegatina (arrastra con el dedo para moverte, pellizca para
+            zoom).
             {draftLatLng ? (
               <>
                 <br />
-                <strong>Ubicación:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
+                <strong>Punto:</strong> {formatLatLng(draftLatLng.lat, draftLatLng.lng)}
               </>
-            ) : null}
-            {geoStatus ? (
+            ) : (
               <>
                 <br />
-                <span style={{ opacity: 0.9 }}>{geoStatus}</span>
+                <span className="hintMuted">Aún no has marcado el sitio.</span>
               </>
-            ) : null}
+            )}
           </div>
 
-          <div className="row">
-            <button className="ghost full" onClick={useMyLocation} disabled={!canStart || alreadyRegistered}>
-              Usar la del móvil
-            </button>
-          </div>
-
-          <div className="miniMapWrap">
+          <div className="miniMapWrap registerMapWrap">
             <MapContainer
               center={draftLatLng ? [draftLatLng.lat, draftLatLng.lng] : [40.4168, -3.7038]}
-              zoom={13}
+              zoom={15}
               className="miniMap"
+              zoomControl
+              doubleClickZoom
+              scrollWheelZoom
+              dragging
+              touchZoom
             >
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

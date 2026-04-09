@@ -271,6 +271,12 @@ button:disabled {
   position: relative;
   width: 100%;
   height: 100svh;
+  height: 100dvh;
+}
+
+.mapOnly .leaflet-container {
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .map {
@@ -421,10 +427,14 @@ button:disabled {
 
 .registerShell {
   min-height: 100svh;
-  padding: 16px;
+  min-height: 100dvh;
+  padding: 12px;
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 16px;
+  gap: 12px;
   background: var(--bg);
 }
 
@@ -448,6 +458,14 @@ button:disabled {
   gap: 12px;
 }
 
+.registerContent .card {
+  margin: 0;
+}
+
+.hintMuted {
+  opacity: 0.85;
+}
+
 .miniMapWrap {
   border-radius: 12px;
   overflow: hidden;
@@ -455,9 +473,55 @@ button:disabled {
   background: var(--code-bg);
 }
 
+.registerMapWrap .leaflet-container {
+  font-family: var(--sans);
+  /* Mejor respuesta al tacto en iOS/Android con Leaflet */
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .miniMap {
-  height: 260px;
+  height: min(52vh, 420px);
+  min-height: 280px;
   width: 100%;
+}
+
+.registerShell .primary,
+.registerShell .ghost {
+  min-height: 48px;
+  font-size: 16px;
+}
+
+@media (max-width: 480px) {
+  .registerShell {
+    padding: 10px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    gap: 10px;
+  }
+
+  .registerTop {
+    flex-wrap: wrap;
+    padding: 10px 12px;
+  }
+
+  .registerTop .title {
+    font-size: 17px;
+  }
+
+  .miniMap {
+    height: min(58vh, 480px);
+    min-height: 300px;
+  }
+
+  .simNfcBox {
+    top: auto;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+  }
 }
 
 @media (max-width: 860px) {

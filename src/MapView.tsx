@@ -113,7 +113,16 @@ export default function MapView() {
 
   return (
     <main className="mapOnly">
-      <MapContainer center={mapCenter} zoom={13} className="map">
+      <MapContainer
+        center={mapCenter}
+        zoom={13}
+        className="map"
+        zoomControl
+        doubleClickZoom
+        scrollWheelZoom
+        dragging
+        touchZoom
+      >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
