@@ -8,6 +8,8 @@ import { useNavigate } from 'react-router-dom'
 import './App.css'
 import { DEMO_LOTS, parseNfcId } from './nfcLots'
 import { loadStickers, saveStickers, type Sticker } from './stickers'
+import { fetchStickersFromSupabase } from './stickersSupabase'
+import { isSupabaseConfigured } from './supabaseClient'
 
 const DefaultMarkerIcon = new L.Icon({
   iconUrl: markerIconUrl,
@@ -35,7 +37,10 @@ function pickRandomStickerNumber(size: number) {
 export default function MapView() {
   const navigate = useNavigate()
 
-  const [stickers] = useState<Sticker[]>(() => loadStickers())
+  const [stickers, setStickers] = useState<Sticker[]>(() =>
+    isSupabaseConfigured() ? [] : loadStickers(),
+  )
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -51,6 +56,36 @@ export default function MapView() {
   )
 
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (!isSupabaseConfigured()) return
+      try {
+        const data = await fetchStickersFromSupabase()
+        if (!cancelled) {
+          setStickers(data)
+          setLoadError(null)
+        }
+      } catch {
+        if (!cancelled) setLoadError('No se pudieron cargar las pegatinas.')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return
+    const t = window.setInterval(() => {
+      void fetchStickersFromSupabase()
+        .then(setStickers)
+        .catch(() => {})
+    }, 12000)
+    return () => window.clearInterval(t)
+  }, [])
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) return
     saveStickers(stickers)
   }, [stickers])
 
@@ -100,7 +135,9 @@ export default function MapView() {
       </MapContainer>
 
       <div className="mapOverlay">
-        {selectedSticker ? (
+        {loadError ? (
+          <div className="overlayPill">{loadError}</div>
+        ) : selectedSticker ? (
           <div className="overlayPill">
             <strong>{selectedSticker.label}</strong> · {selectedSticker.lotName} #{selectedSticker.lotStickerNumber}
           </div>

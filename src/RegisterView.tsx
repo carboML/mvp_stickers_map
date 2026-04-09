@@ -8,6 +8,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import './App.css'
 import { getLotById, parseNfcId } from './nfcLots'
 import { loadStickers, saveStickers, type Sticker } from './stickers'
+import { fetchStickersFromSupabase, insertStickerToSupabase } from './stickersSupabase'
+import { isSupabaseConfigured } from './supabaseClient'
 
 const DefaultMarkerIcon = new L.Icon({
   iconUrl: markerIconUrl,
@@ -41,7 +43,11 @@ export default function RegisterView() {
   const [params] = useSearchParams()
   const nfcId = params.get('nfcId') ?? ''
 
-  const [stickers, setStickers] = useState<Sticker[]>(() => loadStickers())
+  const [stickers, setStickers] = useState<Sticker[]>(() =>
+    isSupabaseConfigured() ? [] : loadStickers(),
+  )
+  const [listLoadError, setListLoadError] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const [draftLatLng, setDraftLatLng] = useState<{ lat: number; lng: number } | null>(null)
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null)
@@ -52,6 +58,26 @@ export default function RegisterView() {
   const lot = useMemo(() => (parsed ? getLotById(parsed.lotId) : null), [parsed])
 
   useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (!isSupabaseConfigured()) return
+      try {
+        const data = await fetchStickersFromSupabase()
+        if (!cancelled) {
+          setStickers(data)
+          setListLoadError(null)
+        }
+      } catch {
+        if (!cancelled) setListLoadError('No se pudo conectar con el servidor.')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isSupabaseConfigured()) return
     saveStickers(stickers)
   }, [stickers])
 
@@ -98,12 +124,14 @@ export default function RegisterView() {
     setPhotoDataUrl(dataUrl)
   }
 
-  function registerSticker() {
+  async function registerSticker() {
     if (!canStart) return
     if (!draftLatLng) return
     if (!photoDataUrl) return
 
     if (!parsed || !lot) return
+
+    setSubmitError(null)
 
     const sticker: Sticker = {
       id: newId(),
@@ -116,6 +144,20 @@ export default function RegisterView() {
       lotStickerNumber: parsed.stickerNumber,
       photoDataUrl,
       createdAt: new Date().toISOString(),
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        await insertStickerToSupabase(sticker)
+        navigate('/')
+      } catch (e) {
+        if (e instanceof Error && e.message === 'DUPLICATE_NFC') {
+          setSubmitError('Esta pegatina ya está registrada.')
+        } else {
+          setSubmitError('No se pudo guardar. Revisa Supabase y vuelve a intentar.')
+        }
+      }
+      return
     }
 
     setStickers((prev) => [sticker, ...prev])
@@ -135,6 +177,8 @@ export default function RegisterView() {
       </div>
 
       <div className="registerContent">
+        {listLoadError ? <div className="empty">{listLoadError}</div> : null}
+
         <section className="card">
           <div className="cardTitle">Pegatina detectada</div>
           {!canStart ? (
@@ -225,8 +269,14 @@ export default function RegisterView() {
             </div>
           ) : null}
 
+          {submitError ? <div className="empty">{submitError}</div> : null}
+
           <div className="row">
-            <button className="primary full" onClick={registerSticker} disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}>
+            <button
+              className="primary full"
+              onClick={() => void registerSticker()}
+              disabled={!canStart || alreadyRegistered || !draftLatLng || !photoDataUrl}
+            >
               Guardar
             </button>
           </div>
